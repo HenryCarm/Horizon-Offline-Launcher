@@ -121,18 +121,29 @@ impl Default for Inflater {
 }
 impl Inflater {
     /// The zlib stream at the front of `input`, which must hold exactly `size` bytes.
+    /// Like vanilla's Inflater: exactly the declared size, and no more. Vanilla never
+    /// reads the stream's end (its final block and checksum), which some servers'
+    /// proxies leave out; FunTime's never arrives, so it is not required here.
     fn inflate(&mut self, input: &[u8], size: usize) -> Result<Vec<u8>> {
         self.0.reset(true);
-        // One byte more than declared: a longer stream fills it.
-        let mut out = Vec::with_capacity(size + 1);
-        let status = self
-            .0
-            .decompress_vec(input, &mut out, FlushDecompress::Finish)
-            .map_err(|e| Error::new(format!("Badly compressed packet - {e}")))?;
-        if out.len() != size || !matches!(status, Status::StreamEnd) {
+        let z = &mut self.0;
+        let mut out = vec![0u8; size];
+        loop {
+            let (read, written) = (z.total_in() as usize, z.total_out() as usize);
+            if written == size {
+                break;
+            }
+            let status = z.decompress(&input[read..], &mut out[written..], FlushDecompress::None)
+                .map_err(|e| Error::new(format!("Badly compressed packet - {e}")))?;
+            let stuck = z.total_in() as usize == read && z.total_out() as usize == written;
+            if status == Status::StreamEnd || stuck {
+                break;
+            }
+        }
+        let written = z.total_out() as usize;
+        if written != size {
             return Err(Error::new(format!(
-                "Badly compressed packet - actual length {} does not match declared size {size}",
-                out.len()
+                "Badly compressed packet - actual length {written} does not match declared size {size}"
             )));
         }
         Ok(out)
@@ -295,6 +306,11 @@ mod tests {
         z.write_all(&[1; 299]).unwrap();
         frame.extend(z.finish().unwrap());
         assert!(decompress(frame, Some(256)).is_err());
+        // Bytes that aren't zlib at all.
+        let mut frame = Vec::new();
+        write_varint(&mut frame, 300);
+        frame.extend([0xFF; 40]);
+        assert!(decompress(frame, Some(256)).is_err());
     }
 
     /// One inflater serves every frame, also after a bad one.
@@ -314,8 +330,13 @@ mod tests {
                 Ok(Body::Inflated(out)) => assert_eq!(out, body),
                 _ => panic!("{n} bytes did not inflate"),
             }
-            // A stream longer than declared, then one shorter.
-            assert!(body_of(&frame(&body, n - 1), &mut inflater).is_err());
+            // A stream longer than declared, then one shorter. Vanilla keeps
+            // exactly the declared bytes and leaves the rest inside the
+            // inflater for the next frame; a missing final block is fine too.
+            assert!(matches!(
+                body_of(&frame(&body, n - 1), &mut inflater),
+                Ok(Body::Inflated(ref out)) if out.len() == n - 1
+            ));
             assert!(body_of(&frame(&body, n + 1), &mut inflater).is_err());
         }
     }
@@ -338,5 +359,37 @@ mod tests {
         z.write_all(&body).unwrap();
         frame.extend(z.finish().unwrap());
         assert_eq!(decompress(frame, Some(256)).unwrap(), body);
+    }
+
+    /// FunTime's proxies send zlib streams with no final block and no Adler-32:
+    /// like vanilla's Inflater, nothing here expects the stream's end.
+    #[test]
+    fn streams_without_their_end_decode_like_vanilla() {
+        let body: Vec<u8> = (0..3000u32).map(|i| (i % 11) as u8).collect();
+        let stream = |level| {
+            let mut z = ZlibEncoder::new(Vec::new(), Compression::new(level));
+            z.write_all(&body).unwrap();
+            z.finish().unwrap()
+        };
+        let framed = |stream: &[u8]| {
+            let mut frame = Vec::new();
+            write_varint(&mut frame, body.len() as i32);
+            frame.extend_from_slice(stream);
+            frame
+        };
+        // Without the Adler-32 checksum, as some proxies send them.
+        let whole = stream(6);
+        let unchecked = &whole[..whole.len() - 4];
+        assert_eq!(decompress(framed(unchecked), Some(256)).unwrap(), body);
+        // Flushed but never finished (no final block).
+        let mut z = flate2::Compress::new(Compression::new(6), true);
+        let mut open = Vec::with_capacity(body.len() + 64);
+        z.compress_vec(&body, &mut open, flate2::FlushCompress::Sync)
+            .unwrap();
+        assert_eq!(decompress(framed(&open), Some(256)).unwrap(), body);
+        // Trailing bytes after the stream are left alone, as vanilla leaves them.
+        let mut trailing = whole.clone();
+        trailing.extend([1, 2, 3]);
+        assert_eq!(decompress(framed(&trailing), Some(256)).unwrap(), body);
     }
 }
