@@ -4,4 +4,4 @@
 # Changing this file needs Ludovic's review (.github/CODEOWNERS).
 MU4oiIQcCxkZvbwSjjXs7SySCuM6ywRQ3nGaJYZG0gw=
 # HenryCarm/Horizon-Offline-Launcher release key (HenryCarm, 2026-11-08)
-G7lykiazs+YTWYPQm7+9woZdVUL0vBhEUg+lr7/HE6o=
+8LlXJFXHkGPX0Vxv/7Gl/0eKzSc8amQvzPLX2tskJi0=
