@@ -5,7 +5,7 @@
 
 .DESCRIPTION
   One line, in PowerShell:
-    irm https://github.com/gerdaroot/Horizon-Offline-Launcher/releases/latest/download/install.ps1 | iex
+    irm https://github.com/HenryCarm/Horizon-Offline-Launcher/releases/latest/download/install.ps1 | iex
 
   Or with a launcher you built yourself (build.ps1 does this for you):
     .\install.ps1 -Exe launcher\target\release\horizon-launcher.exe
@@ -18,7 +18,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$Repo = "gerdaroot/Horizon-Offline-Launcher"
+$Repo = "HenryCarm/Horizon-Offline-Launcher"
 $Asset = "horizon-launcher-windows-x64.zip"
 $Name = "Horizon Offline Launcher"
 $Dir = Join-Path $env:LOCALAPPDATA "Programs\HorizonOfflineLauncher"

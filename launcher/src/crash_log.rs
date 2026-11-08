@@ -40,7 +40,7 @@ fn report(panic: &str) -> String {
          {panic}\n\n\
          Backtrace:\n{}\n\n\
          Please attach this file to an issue: \
-         https://github.com/gerdaroot/Horizon-Offline-Launcher/issues/new?template=crash.yml\n",
+         https://github.com/HenryCarm/Horizon-Offline-Launcher/issues/new?template=crash.yml\n",
         backend::VERSION,
         chrono::Local::now().format("%Y-%m-%d %H:%M:%S"),
         std::env::consts::OS,
@@ -59,7 +59,7 @@ fn tell(file: &std::path::Path) {
     let wide = |s: &str| s.encode_utf16().chain([0]).collect::<Vec<u16>>();
     let text = wide(&format!(
         "Horizon Offline Launcher crashed.\n\nThe report is in:\n{}\n\nPlease attach it to an issue on \
-         github.com/gerdaroot/Horizon-Offline-Launcher.",
+         github.com/HenryCarm/Horizon-Offline-Launcher.",
         file.display()
     ));
     let caption = wide("Horizon Offline Launcher");
