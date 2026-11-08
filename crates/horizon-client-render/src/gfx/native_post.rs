@@ -447,7 +447,7 @@ impl NativeFrame {
             sampler_entry(2),
             texture_entry(3, wgpu::TextureSampleType::Depth),
             comparison_entry(4),
-            texture_entry(6, wgpu::TextureSampleType::Depth),
+            texture_entry(6, wgpu::TextureSampleType::Float { filterable: false }),
             texture_entry(7, wgpu::TextureSampleType::Depth),
             texture_entry(8, wgpu::TextureSampleType::Float { filterable: true }),
             texture_entry(11, wgpu::TextureSampleType::Float { filterable: false }),
@@ -975,7 +975,7 @@ impl NativePost {
         let mut entries = vec![
             frame_entry(wgpu::ShaderStages::FRAGMENT),
             texture_entry(1, float),
-            texture_entry(2, wgpu::TextureSampleType::Depth),
+            texture_entry(2, wgpu::TextureSampleType::Float { filterable: false }),
             texture_entry(3, float),
             sampler_entry(4),
             sampler_entry(5),

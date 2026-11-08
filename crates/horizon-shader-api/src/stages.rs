@@ -162,8 +162,8 @@ const POST_RESOURCES: [Resource; 12] = [
     Resource {
         binding: 2,
         name: "scene_depth",
-        ty: "var scene_depth: texture_depth_2d",
-        doc: "The world's depth, reversed (1 near, 0 far and sky).",
+        ty: "var scene_depth: texture_2d<f32>",
+        doc: "The world's depth, reversed (1 near, 0 far and sky): read it as `textureLoad(scene_depth, texel, 0).r` (bound as an unfilterable float; OpenGL's GLSL cannot translate a load from a depth texture).",
     },
     Resource {
         binding: 3,
@@ -214,8 +214,8 @@ const MATERIAL_RESOURCES: [Resource; 11] = [
     Resource {
         binding: 6,
         name: "opaque_depth",
-        ty: "var opaque_depth: texture_depth_2d",
-        doc: "The world's depth before translucent terrain (reversed, like `scene_depth`), for the translucent pass: `textureLoad(opaque_depth, vec2<i32>(input.screen * frame.resolution), 0)` is what lies behind water or glass. Stale while solid terrain draws.",
+        ty: "var opaque_depth: texture_2d<f32>",
+        doc: "The world's depth before translucent terrain (reversed, like `scene_depth`), for the translucent pass: `textureLoad(opaque_depth, vec2<i32>(input.screen * frame.resolution), 0).r` is what lies behind water or glass. Read `.r` (bound as an unfilterable float). Stale while solid terrain draws.",
     },
     Resource {
         binding: 9,
@@ -243,7 +243,7 @@ const POST_HELPERS: &str = "\
 fn depth_at(uv: vec2<f32>) -> f32 {
     let size = vec2<f32>(textureDimensions(scene_depth));
     let texel = vec2<i32>(clamp(uv * size, vec2<f32>(0.0), size - 1.0));
-    return textureLoad(scene_depth, texel, 0);
+    return textureLoad(scene_depth, texel, 0).r;
 }
 // The camera-relative world position, in blocks, of the point at `uv` and `depth`.
 fn view_position(uv: vec2<f32>, depth: f32) -> vec3<f32> {
@@ -408,7 +408,7 @@ fn surface_at(texel: vec2<i32>) -> SurfaceData {
     let t = clamp(texel, vec2<i32>(0), size - 1);
     let s = bitcast<vec4<f32>>(textureLoad(scene_surface, t, 0));
     let depth_size = vec2<i32>(textureDimensions(scene_depth));
-    let depth = textureLoad(scene_depth, clamp(texel, vec2<i32>(0), depth_size - 1), 0);
+    let depth = textureLoad(scene_depth, clamp(texel, vec2<i32>(0), depth_size - 1), 0).r;
     // The terrain's own depth is stored with it: anything drawn nearer since hides it.
     let present = s.w > 0.0 && abs(s.w - depth) <= s.w * 1e-5;
     let e = unpack2x16snorm(bitcast<u32>(s.x));
