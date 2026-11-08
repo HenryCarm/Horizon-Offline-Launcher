@@ -1,16 +1,16 @@
 # Microsoft account sign-in and online-mode play
 
 Horizon signs players in with their Microsoft account in the launcher and joins online-mode
-(authenticated) servers like vanilla 26.3 does. An account is optional
-([playing without an account](#playing-without-an-account)): offline names, LAN and offline-mode
-servers play without one. This note is the design, the status of each part and what Ludovic has to
+(authenticated) servers like vanilla 26.3 does. The launcher plays only with an account that owns
+Minecraft: Java Edition ([the owner gate](#the-owner-gate)); offline names, LAN and offline-mode
+servers play behind it. This note is the design, the status of each part and what Ludovic has to
 register.
 
 ## What Ludovic registers (needs his accounts)
 
 Nothing below can be done by an agent: the app registrations belong to Ludovic. A build without
-the client ID can't sign in ("This build of the launcher has no Microsoft sign-in") and plays
-offline only; release builds have it.
+the client ID can't sign in, so its launcher can't start the game ("This build of the launcher has
+no Microsoft sign-in"); release builds have it.
 
 1. **Azure app registration** (https://portal.azure.com → Microsoft Entra ID → App registrations →
    New registration):
@@ -66,21 +66,39 @@ All requests use HTTPS and JSON except the two OAuth calls (form-encoded):
 7. **Profile**: `GET https://api.minecraftservices.com/minecraft/profile`: UUID, name, skins, capes.
    404 = owns the game but has no profile yet ("Create your Minecraft profile on minecraft.net first").
 
-## Playing without an account
+## The owner gate
 
-An account is optional. Every Play (Home, instances and packs, `horizon-launcher play`,
-`modpack play`, the MCP's `play`) asks `account::launch` for the selected account's session: the
-token renewal (below) if due, then entitlements and profile. When there is no account, it can't be
-renewed (no network) or it doesn't own the game, the game starts without a session, offline, under
-an offline name or the game's own. Offline names can be added without an account.
+Decided 2026-10-27 (Ludovic, after a modder's suggestion): like other launchers, Horizon's
+launcher starts the game only while an account in it owns Java Edition. Offline play stays
+possible; the launcher just doesn't offer it on its own.
 
-Each account's keychain item keeps the last ownership answer (`owns`): it says whether Horizon can
-download the game from Mojang for that account.
+- **Play needs an owner.** Every Play (Home, instances and packs, `horizon-launcher play`,
+  `modpack play`, the MCP's `play`) asks `account::launch` first. It asks the Minecraft services
+  again for each account, the selected one first, until one owns the game: the token renewal
+  (below) if due, then entitlements and profile. Without an owner the game doesn't start and Play
+  says "Sign in with a Microsoft account that owns Minecraft: Java Edition to play", with Sign in.
+- **The window says it once.** A player without an owner (one who played offline until now) sees
+  the gate's screen once when the launcher opens: why Horizon needs the account ("like other
+  launchers"), that worlds, offline names and settings stay where they are, and Sign in, which shows
+  the device code on the same screen. It comes back whenever Play is refused; Not now closes it,
+  and Home keeps a Sign in row (`launcher/src/owner_page.rs`).
+- **The answer lives with the tokens.** Each account's keychain item keeps the last answer
+  (`owns`), so accounts.json can't say yes. Where there is no keychain the answer sits in the
+  secrets file with the tokens; a player can edit that file, as they can write keychain items with
+  `secret-tool` or Keychain Access. With no network (or a sign-in that can't be renewed) the
+  last answer stands: being offline never blocks a player who passed before, and the game starts
+  without a session, offline. An answer of "doesn't own" (or no profile) blocks at once.
+- **Offline names play behind an owner.** They can be added and played only while an owning
+  account is signed in. Signing the last one out keeps them, and they play again once one is back.
+- **Who isn't affected:** the game binary itself (`horizon-client`, `horizon-ctl launch`, the
+  harnesses, CI), the dedicated server and `horizon-server`, the website. There is no bypass flag:
+  the launcher's tests use accounts in a memory store (`MemoryStore`, and `HORIZON_NO_KEYCHAIN`
+  for the CLI and MCP tests, which then have no owner).
 
 ## Downloading the game for an owner
 
 Decided 2026-10-27. This is the only exception to "Horizon never downloads the game", and it
-applies only on the player's machine, for an account `account::launch` just asked about. The
+applies only on the player's machine, for an account the owner gate just asked about. The
 launcher's "Download and prepare" (`horizon-launcher prepare --download`) fetches the pinned
 version straight from Mojang (`launcher/src/mojang.rs`): the version file, the client jar,
 libraries, the asset index and the assets, each checked against the size and sha1 Mojang lists.
@@ -90,7 +108,7 @@ download or keep Mojang's files.
 
 Refresh: the Minecraft token is renewed from the Microsoft refresh token (steps 2-5 with
 `grant_type=refresh_token`) when it has less than an hour left, before every launch; steps 6-7 run
-at every launch. A refused
+at every launch (the owner gate). A refused
 refresh token (`invalid_grant`) asks the player to sign in again. Several accounts can be signed in;
 one is selected. "Sign out" deletes the account's secrets from the keychain.
 
@@ -118,9 +136,38 @@ one is selected. "Sign out" deletes the account's secrets from the keychain.
   other apps' items.
 - `accounts.json` in the launcher's data folder keeps only public data: UUID, name, skin URL, which
   account is selected. Never a token.
-- No keychain available (a Linux box without a Secret Service, a locked keychain): sign-in still
-  works for the session but nothing is saved, and the launcher says "No keychain available: you will
-  have to sign in again next time" (it never falls back to a plain file).
+- Linux and FreeBSD with no keychain answering (no Secret Service, a locked keychain, #5095): the
+  secrets the keychain refuses go to `account-secrets.json` in the launcher's data folder instead,
+  readable and writable by the player only (0600 on Unix) and never in plain text: the file is
+  encrypted (ChaCha20-Poly1305) with a key derived from the computer's identity (`/etc/machine-id`,
+  `/etc/hostid`) and a random secret of the install's own, `account-secrets.key` beside it (32
+  bytes, 0600, made at the first write), so a copy taken off the computer (a backup, a synced home
+  folder) can't be read elsewhere, and nobody can work the key out from what every user can read.
+  On the computer itself the files' mode is what keeps other users out. A file sealed by an older
+  launcher (machine identity only) is read once and sealed again under the new key. A file that
+  doesn't open (another computer's, or changed) is never written over: remove it and sign in again. The
+  launcher never picks one store for a run: every read takes the file's copy first (it was written
+  while the keychain was away, so it is the newer one) and the keychain's otherwise, and every write
+  goes to the keychain and to the file only when it refuses. Each change to the file holds
+  `account-secrets.lock` across its read and replace, and each write goes through a temporary file
+  of its own, so launcher and CLI processes running at once lose nothing. The lock is never held
+  while the keychain is asked (it can wait on an unlock prompt): a file entry the keychain took is
+  removed only if it still holds what was read before, so another process's newer write stays and
+  is read first. Writes to the keychain hold `account-secrets.keychain.lock` instead, with what they
+  write read under it, so a hand-over never puts back a token another process renewed or signed out
+  meanwhile; only keychain writes wait on a prompt, as they would on the keychain itself. Once the keychain refuses or doesn't answer (a dismissed prompt), the run stops
+  asking it and keeps new sign-ins in the file, until it finds that another process handed the
+  keychain a secret it saw in the file (one it put there, read there, or found there at its start). Every start
+  hands the keychain what the file kept, one secret at a time up to the first it refuses; the rest
+  stays in the file, which goes once it is empty. Signing out while the keychain is away leaves an empty entry for the
+  account, which hides the keychain's copy until it can be deleted. A broken file is an error naming
+  only its line and column, never what it holds. Only sign-ins go there: the Tailscale access token
+  (Internet servers) administers the player's whole tailnet, so without a keychain it stays in
+  memory for the run (`account::keychain`). MCP's `account_list` says `secrets_file: true` while
+  the file holds a sign-in (sign-out marks alone, or a file that can't be read, don't count).
+- No keychain on macOS or Windows, or `HORIZON_NO_KEYCHAIN` (the launcher's own tests): secrets
+  stay in memory for the run, and the launcher says "No keychain available: you are signed in until
+  the launcher closes".
 - Tokens never appear in logs, errors, `horizon-launcher` CLI output, MCP results or crash reports.
   Requests are logged by endpoint name only.
 
@@ -191,6 +238,16 @@ machine can read it in the process list. Horizon keeps it out of argv:
 - `HORIZON_SESSION_FILE` is the same as `--session-file` (development and harnesses).
 - `--session-stdin` takes the same JSON on standard input instead, so nothing touches the disk (for other
   launchers: [the Launch API](api/launch.md)).
+
+
+- While the game's Splitscreen setting is on (`splitscreen:true` in `horizon-extras.txt`), the
+  other signed-in accounts get a session file each too, for splitscreen players to sign in with, listed in `HORIZON_ACCOUNT_SESSIONS` (`[{"name", "uuid", "file"}]`). Each token is renewed
+  first when due; after ten seconds no further renewal starts (an in-flight request finishes).
+  Accounts whose sessions cannot be provided are listed with `skipped` instead
+  of `file`, with no token. They remain in the picker marked “(Offline)”, with a “Sign in again
+  in the launcher” tooltip; valid sessions have a “Microsoft online” tooltip. The game logs
+  unavailable accounts and still starts. These names can play in P1's world or on local offline-mode
+  servers; external and online-mode servers require a valid session from the launcher.
 
 ## Online-mode login (game)
 
@@ -265,7 +322,17 @@ To chat on such servers the game (`auth.rs`, `game/remote_chat.rs`, `horizon_pro
 `tools/secure_chat_client_e2e.py` checks it against vanilla 26.3's server with a mock of the services
 that issues certificates: online mode with `enforce-secure-profile=true` (signed chat logged as secure,
 a `/msg` whisper delivered, a message flushed from Chat Delay still counted as seen, nothing refused) and
-offline mode (unsigned chat, as before). Other players' signatures are not verified yet.
+offline mode (unsigned chat, as before). Both also click commands: `sendUnattendedCommand`'s confirmations
+(`game/remote_chat.rs`) ask before anything but a plain command, and a clicked command with a message argument
+only reaches the chat box, for the player to send.
+
+Chat from other players is checked as vanilla's client does (`ClientPacketListener.handlePlayerChat`,
+`game/remote.rs`, `secure_chat::MessageValidator`): a wrong global chat index disconnects, and a sender
+with no list entry or a message its validator refuses shows the red, italic `chat.validation_error`. A
+chat session the services' profile-key keys vouch for makes a keyed validator (the key not past its
+expiry plus 8 hours, the signature, the chain); anything else makes the fallback, which accepts unsigned
+messages, or none where the server enforces secure chat. The unit tests in `secure_chat.rs` cover the
+validators; the script above doesn't send another player's chat.
 
 ## Harnesses
 
