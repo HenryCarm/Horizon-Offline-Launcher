@@ -4,7 +4,7 @@
 //! and its on/off `Toggle` at the row's end. Dark appearance only.
 use super::*;
 use crate::glass_ui::{self as ui, white};
-use glass_home_lists::Listener;
+use glass_home_lists::{danger_button, Listener};
 use horizon_theme::glass::radius;
 use instance_mods::ModRow;
 use servers_page::Field;
