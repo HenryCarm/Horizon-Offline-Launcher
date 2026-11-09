@@ -114,6 +114,10 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
+          if (-not (Test-Path ..\packaging\windows\setup.iss)) {
+            Write-Host "no Windows installer script in this fork; skipping"
+            exit 0
+          }
           $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
           if (-not (Test-Path $iscc)) {
             choco install innosetup -y --no-progress

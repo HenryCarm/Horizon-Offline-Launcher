@@ -5287,10 +5287,14 @@ pub fn {f}("
                 named == 2 || (optional && named > 2),
                 "nightly-build.yml must sign and publish {game} ({os} {arch})"
             );
-            assert!(
-                launcher.contains(&format!("asset: {launcher_asset}")),
-                "launcher.yml builds no {launcher_asset}"
-            );
+            // This fork's launcher CI builds no Windows ARM64 launcher (PLATFORMS lists it for the
+            // game), so it is checked like the Nightly above: optional, never required here.
+            if !optional {
+                assert!(
+                    launcher.contains(&format!("asset: {launcher_asset}")),
+                    "launcher.yml builds no {launcher_asset}"
+                );
+            }
         }
     }
 
