@@ -1256,5 +1256,7 @@
   "Sort: {how}": "Sort: {how}",
   "Modded by HenryJayz btw :3": "Modded by HenryJayz btw :3",
   "My Website": "My Website",
-  "My Profile": "My Profile"
+  "My Profile": "My Profile",
+  "No Java instance yet — add one with + beside Instances.": "No Java instance yet — add one with + beside Instances.",
+  "No Rust instance yet — add one with + beside Instances.": "No Rust instance yet — add one with + beside Instances."
 }
