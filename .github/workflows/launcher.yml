@@ -54,16 +54,6 @@ jobs:
             os: ubuntu-22.04
             binary: horizon-launcher
             asset: horizon-launcher-linux-x86_64.tar.gz
-          - name: macos
-            os: macos-15
-            binary: horizon-launcher
-            asset: horizon-launcher-macos-arm64.zip
-          # Intel Macs: the same runner, another target.
-          - name: macos-x64
-            os: macos-15
-            target: x86_64-apple-darwin
-            binary: horizon-launcher
-            asset: horizon-launcher-macos-x64.zip
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     env:
@@ -136,6 +126,55 @@ jobs:
         with:
           name: Horizon-Offline-Launcher-Setup.exe
           path: dist/Horizon-Offline-Launcher-Setup.exe
+
+  # macOS runners are scarce on free accounts and their cancellations (zero steps ran)
+  # must never hold the release hostage: this leg never blocks `release`.
+  build-macos:
+    name: ${{ matrix.name }}
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macos
+            os: macos-15
+            binary: horizon-launcher
+            asset: horizon-launcher-macos-arm64.zip
+          - name: macos-x64
+            os: macos-15
+            target: x86_64-apple-darwin
+            binary: horizon-launcher
+            asset: horizon-launcher-macos-x64.zip
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    defaults:
+      run:
+        working-directory: launcher
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: launcher
+          key: ${{ matrix.name }}
+      - name: Version from the tag
+        if: startsWith(github.ref, 'refs/tags/launcher@')
+        run: |
+          echo "HORIZON_LAUNCHER_VERSION=${GITHUB_REF_NAME#launcher@}" >> "$GITHUB_ENV"
+          echo "HORIZON_LAUNCHER_TAG=$GITHUB_REF_NAME" >> "$GITHUB_ENV"
+      - run: cargo build --release --locked ${{ matrix.target && format('--target {0}', matrix.target) || '' }}
+      - name: Package
+        run: |
+          mkdir -p ../dist
+          out=target/release; [[ -n "${{ matrix.target }}" ]] && out="target/${{ matrix.target }}/release"
+          (cd "$out" && zip -q "$GITHUB_WORKSPACE/dist/${{ matrix.asset }}" ${{ matrix.binary }})
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset }}
+          path: dist/${{ matrix.asset }}
 
   release:
     needs: [test, build]
