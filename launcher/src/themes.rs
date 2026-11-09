@@ -2,7 +2,7 @@
 //! Home.
 //!
 //! An accent is a hue, and the player may pick any of them; seven hues have names, as shortcuts.
-//! Horizon's violet is the default. Another hue turns the violet tokens (`horizon_theme::Blocks`'
+//! Red is the default (Henny's launcher). Another hue turns the violet tokens (`horizon_theme::Blocks`'
 //! accent and the main action's face, bevel and lip) to it, keeping their saturation and
 //! lightness, then darkens or lightens each just enough to read as well as the violet does: white
 //! on the face at 4.5:1, the accent at 3:1 on every background.
@@ -13,11 +13,18 @@ use std::path::{Path, PathBuf};
 /// An accent: a hue in degrees, or none for Horizon's violet, whose tokens are the palette's own
 /// and stay untouched; and for a colour typed as hex, that colour (the glass look wears it as
 /// is, the light look takes its hue).
-#[derive(Clone, Copy, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(try_from = "String", into = "String")]
 pub struct Accent {
     hue: Option<f32>,
     rgb: Option<u32>,
+}
+
+impl Default for Accent {
+    /// Red is the default accent (Henny's launcher).
+    fn default() -> Self {
+        Self::RED
+    }
 }
 
 /// The accent a launcher theme brings: a hue in degrees (First Light) or one exact colour (Nord's
