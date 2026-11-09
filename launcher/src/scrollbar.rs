@@ -51,6 +51,11 @@ impl Geometry {
 impl Scrollbar {
     /// Wrap the scroll container, reserving a narrow gutter so the bar never covers controls.
     pub fn wrap(&self, content: Stateful<Div>, theme: &Theme) -> Div {
+        self.wrap_with(content, theme, 12.)
+    }
+
+    /// Like [`Self::wrap`], with a wider track and thumb (Settings' right edge).
+    pub fn wrap_with(&self, content: Stateful<Div>, theme: &Theme, width: f32) -> Div {
         let state = self.clone();
         // Dark wears the glass look's thin bar: white at 14 % on no track (`scrollbar-color`).
         let (track_color, thumb_color) = if theme.glass {
@@ -161,7 +166,7 @@ impl Scrollbar {
                 .right(px(2.))
                 .top_0()
                 .bottom_0()
-                .w(px(12.)),
+                .w(px(width)),
             )
     }
 }

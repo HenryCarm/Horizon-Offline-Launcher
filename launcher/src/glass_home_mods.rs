@@ -23,7 +23,7 @@ impl Launcher {
         let (fresh, count) = (m.fresh, m.list.len());
         let mut body = div().flex().flex_col();
         body = body.children(self.mods_busy_plate());
-        if !fresh {
+        if !fresh && count == 0 {
             return body.child(ui::empty().child(tr("Reading the mods…")));
         }
         if count == 0 {
@@ -60,6 +60,41 @@ impl Launcher {
                 cx.notify();
             }))
         });
+        const HOW: [&str; 5] = ["Name", "On first", "Off first", "Largest", "Smallest"];
+        let how = HOW[(self.settings.mods_sort as usize) % 5];
+        let sort_button = ui::quiet(
+            "instance-mods-sort",
+            trf("Sort: {how}", &[("how", &tr(how))]),
+            36.,
+            &t,
+        )
+        .on_click(cx.listener(|this, _: &ClickEvent, _, cx| {
+            this.settings.mods_sort = (this.settings.mods_sort + 1) % 5;
+            this.save_settings();
+            this.instance_mods.cull.reset();
+            cx.notify();
+        }));
+        let all = (!busy).then(|| {
+            div()
+                .flex()
+                .gap(px(8.))
+                .child(
+                    ui::quiet("instance-mods-all-on", tr("All on"), 36., &t).on_click(
+                        cx.listener(|this, _: &ClickEvent, _, cx| {
+                            this.set_all_mods(true);
+                            cx.notify();
+                        }),
+                    ),
+                )
+                .child(
+                    ui::quiet("instance-mods-all-off", tr("All off"), 36., &t).on_click(
+                        cx.listener(|this, _: &ClickEvent, _, cx| {
+                            this.set_all_mods(false);
+                            cx.notify();
+                        }),
+                    ),
+                )
+        });
         body = body.child(
             ui::list_head(note).child(
                 div()
@@ -68,6 +103,8 @@ impl Launcher {
                     .gap(px(8.))
                     .child(field)
                     .children(update_all)
+                    .children(all)
+                    .child(sort_button)
                     .child(
                         ui::quiet_icon(
                             "instance-mods-add",
@@ -88,13 +125,20 @@ impl Launcher {
                         .is_some_and(|e| native_status::is_native_file(&e.file))
             });
         body = body.children(native.then(|| self.native_build(cx)).flatten());
-        let rows: Vec<ModRow> = self
+        let mut rows: Vec<ModRow> = self
             .instance_mods
             .list
             .iter()
             .filter(|r| filter.is_empty() || r.name.to_lowercase().contains(&filter))
             .cloned()
             .collect();
+        match self.settings.mods_sort {
+            1 => rows.sort_by_key(|r| (std::cmp::Reverse(r.on), r.name.to_lowercase())),
+            2 => rows.sort_by_key(|r| (r.on, r.name.to_lowercase())),
+            3 => rows.sort_by_key(|r| (std::cmp::Reverse(r.size), r.name.to_lowercase())),
+            4 => rows.sort_by_key(|r| (r.size, r.name.to_lowercase())),
+            _ => {}
+        }
         if rows.is_empty() {
             return body.child(ui::empty().child(tr("No mod matches.")));
         }
@@ -181,6 +225,35 @@ impl Launcher {
                 })),
             })
         });
+        let confirm = self.instance_mods.confirm_remove.as_ref() == Some(&row.file);
+        let gone = row.clone();
+        let file = row.file.clone();
+        let remove = (!busy && row.native.is_none() && (hovered || confirm)).then(|| {
+            if confirm {
+                danger_button(
+                    SharedString::from(format!("mod-trash-{}", file)),
+                    tr("Click again to remove").into(),
+                )
+                .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
+                    this.remove_mod(&gone);
+                    cx.notify();
+                }))
+            } else {
+                ui::icon_button(
+                    SharedString::from(format!("mod-remove-{}", file)),
+                    "delete-02",
+                    36.,
+                    17.,
+                    radius::CONTROL,
+                    false,
+                    &t,
+                )
+                .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
+                    this.instance_mods.confirm_remove = Some(file.clone());
+                    cx.notify();
+                }))
+            }
+        });
         let controls = match &row.native {
             Some(native) => self.native_mod_actions(native, busy, cx),
             None => {
@@ -206,6 +279,7 @@ impl Launcher {
             .child(icon)
             .child(ui::list_text(row.name.clone(), note))
             .children(update.map(|u| u.relative()))
+            .children(remove.map(|r| div().relative().child(r)))
             .child(
                 controls
                     .relative()

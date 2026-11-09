@@ -1,5 +1,5 @@
 //! The glass look's frame (the mockup's `launcher-app.tsx`): the sidebar plate with the
-//! instances, the launcher's update, Sculk's card, Discord and the links; the top bar with the
+//! instances, the launcher's update, Sculk's card (links live in Settings now); the top bar with the
 //! pages in a glass tab strip, the player, Microsoft sign-in and Settings; and the menus they open.
 //! Dark appearance only for now (`docs/design-system.md`, "Glass").
 use super::*;
@@ -653,150 +653,29 @@ impl Launcher {
             foot = foot.child(side);
         }
 
-        if !self.links.discord.is_empty() {
-            let url = self.links.discord.clone();
-            foot = if mini {
-                foot.child(keyboard(
-                    div()
-                        .id("discord")
-                        .flex()
-                        .items_center()
-                        .justify_center()
-                        .h(px(44.))
-                        .w_full()
-                        .rounded(px(radius::CONTROL))
-                        .bg(ui::color(horizon_theme::glass::DISCORD))
-                        .hover(|s| s.bg(ui::color(horizon_theme::glass::DISCORD_HOVER)))
-                        .cursor_pointer()
-                        .child(ui::icon("discord", 18., gpui::white()))
-                        .on_click(move |_, _, cx| cx.open_url(&url)),
-                    &t,
-                ))
-            } else {
-                foot.child(keyboard(
-                div()
-                    .id("discord")
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .gap(px(10.))
-                    .mt(px(12.))
-                    .h(px(40.))
-                    .rounded(px(radius::ROW))
-                    .bg(ui::color(horizon_theme::glass::DISCORD))
-                    .hover(|s| s.bg(ui::color(horizon_theme::glass::DISCORD_HOVER)))
-                    .cursor_pointer()
-                    .child(ui::icon("discord", 18., gpui::white()))
-                    .child(
-                        ui::text(14., FontWeight::SEMIBOLD, ink::FULL)
-                            .child(tr("Join the Discord")),
-                    )
-                    .on_click(move |_, _, cx| cx.open_url(&url)),
-                &t,
-            ))
-            };
-        }
-        let link = |id: &'static str, label: &'static str, icon: &'static str, url: String| {
-            let id = SharedString::from(id);
-            keyboard(
-                track_hover(
-                    div()
-                        .id(id.clone())
-                        .relative()
-                        .flex()
-                        .items_center()
-                        .gap(px(10.))
-                        .h(px(36.))
-                        .px(px(8.))
-                        .rounded(px(radius::ROW))
-                        .cursor_pointer()
-                        .text_color(white(ink::SOFT))
-                        .hover(|s| s.text_color(white(ink::FULL)))
-                        .child(hover_layer(&id, white(fill::HOVER), radius::ROW, 0.))
-                        .child(ui::icon(icon, 17., white(ink::SOFT)).relative())
-                        .child(
-                            div()
-                                .relative()
-                                .font_family(horizon_theme::glass::FONT)
-                                .text_size(px(14.))
-                                .child(label),
-                        )
-                        .on_click(move |_, _, cx| cx.open_url(&url)),
-                    id,
-                ),
-                &t,
-            )
-        };
-        let mut mini_links = div().flex().flex_col().gap(px(4.)).mt(px(8.));
-        if mini {
-            if !self.links.sponsor.is_empty() {
-                let url = self.links.sponsor.clone();
-                mini_links = mini_links.child(keyboard(
-                    div()
-                        .id("sponsor")
-                        .flex()
-                        .items_center()
-                        .justify_center()
-                        .h(px(40.))
-                        .w_full()
-                        .rounded(px(radius::CONTROL))
-                        .cursor_pointer()
-                        .hover(|s| s.bg(white(fill::HOVER)))
-                        .child(ui::icon("favourite", 18., white(ink::SOFT)))
-                        .on_click(move |_, _, cx| cx.open_url(&url)),
-                    &t,
-                ));
-            }
-            if !self.links.website.is_empty() {
-                let url = self.links.website.clone();
-                mini_links = mini_links.child(keyboard(
-                    div()
-                        .id("website")
-                        .flex()
-                        .items_center()
-                        .justify_center()
-                        .h(px(40.))
-                        .w_full()
-                        .rounded(px(radius::CONTROL))
-                        .cursor_pointer()
-                        .hover(|s| s.bg(white(fill::HOVER)))
-                        .child(ui::icon("globe-02", 18., white(ink::SOFT)))
-                        .on_click(move |_, _, cx| cx.open_url(&url)),
-                    &t,
-                ));
-            }
-        }
-        let mut links = div().flex().flex_col().mt(px(8.));
-        if !self.links.sponsor.is_empty() {
-            links = links.child(link(
-                "sponsor",
-                tr("Sponsor"),
-                "favourite",
-                self.links.sponsor.clone(),
-            ));
-        }
-        if !self.links.website.is_empty() {
-            links = links.child(link(
-                "website",
-                tr("Website"),
-                "globe-02",
-                self.links.website.clone(),
-            ));
-        }
         if !mini {
-            foot = foot.child(links).child(
-                ui::text(12., FontWeight::NORMAL, ink::DIM)
-                    .id("launcher-version")
-                    .px(px(8.))
-                    .pt(px(8.))
-                    .child(trf("Launcher {version}", &[("version", backend::VERSION)]))
-                    .on_click(cx.listener(|this, _: &ClickEvent, _, cx| {
-                        this.version_clicked();
-                        cx.notify();
-                    })),
+            foot = foot.child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .child(
+                        ui::text(12., FontWeight::NORMAL, ink::DIM)
+                            .id("launcher-version")
+                            .px(px(8.))
+                            .pt(px(8.))
+                            .child(trf("Launcher {version}", &[("version", backend::VERSION)]))
+                            .on_click(cx.listener(|this, _: &ClickEvent, _, cx| {
+                                this.version_clicked();
+                                cx.notify();
+                            })),
+                    )
+                    .child(
+                        ui::text(11., FontWeight::NORMAL, ink::DIM)
+                            .px(px(8.))
+                            .pt(px(2.))
+                            .child(tr("Modded by HenryJayz btw :3")),
+                    ),
             );
-        } else {
-            foot = foot.child(mini_links);
         }
 
         let collapse = div()
@@ -907,33 +786,6 @@ impl Launcher {
             .child(keyboard(chip, &t))
             .children(self.glass_account_menu(cx));
 
-        // Signing in with Microsoft, while nobody is: the mockup's button.
-        let sign_in = (!matches!(self.accounts.player(), Player::Microsoft(_))).then(|| {
-            keyboard(
-                div()
-                    .id("topbar-sign-in")
-                    .relative()
-                    .flex()
-                    .items_center()
-                    .gap(px(10.))
-                    .h(px(44.))
-                    .px(px(16.))
-                    .rounded(px(radius::ROW))
-                    .bg(white(fill::BUTTON))
-                    .hover(|s| s.bg(white(fill::BUTTON_HOVER)))
-                    .cursor_pointer()
-                    .child(microsoft::logo(16.))
-                    .child(
-                        ui::text(14., FontWeight::MEDIUM, ink::FULL)
-                            .child(tr("Sign in with Microsoft")),
-                    )
-                    .on_click(cx.listener(|this, _: &ClickEvent, _, cx| {
-                        this.start_sign_in();
-                        cx.notify();
-                    })),
-                &t,
-            )
-        });
         let settings = ui::icon_button(
             "nav-Settings",
             "sliders-horizontal",
@@ -989,7 +841,6 @@ impl Launcher {
                     .gap(px(6.))
                     .children(build_log)
                     .child(account)
-                    .children(sign_in)
                     .child(settings),
             )
     }

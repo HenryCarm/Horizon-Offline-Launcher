@@ -4426,11 +4426,11 @@ pub struct Settings {
     #[serde(default)]
     pub accent: crate::themes::Accent,
     /// How much white the glass look's plates take, in percent (the mockup's Glass, 0 to 16).
-    /// Unset is the mockup's 6.
+    /// Unset is flat (0): frost is opt-in, never the default.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub glass: Option<f32>,
     /// How much the glass look's plates blur the scene behind them, in px (0 to 48). Unset is
-    /// the mockup's 24.
+    /// flat (0), like the tint above.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub blur: Option<f32>,
     /// The launcher theme (`themes::theme`): its sky behind the light appearance. Unset is
@@ -4473,6 +4473,10 @@ pub struct Settings {
     /// comes from the player's own install. Off by default, and absent from the file while off.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub dev_offline: bool,
+    /// How the Home Mods tab orders mods, as an index into its sort choices (0 name, 1 on
+    /// first, 2 off first, 3 largest first, 4 smallest first).
+    #[serde(default)]
+    pub mods_sort: u8,
 }
 
 impl Settings {
@@ -4540,16 +4544,17 @@ impl Settings {
         self.prune_old_versions.unwrap_or(true)
     }
     /// The plates' white as a fraction (0 to 0.16): [`glass`](Self::glass) in percent.
+    /// Unset is flat (0 bytes of frost by default).
     pub fn glass_tint(&self) -> f32 {
         self.glass
             .filter(|v| v.is_finite())
-            .map_or(horizon_theme::glass::TINT, |v| v.clamp(0., 16.) / 100.)
+            .map_or(0.0, |v| v.clamp(0., 16.) / 100.)
     }
-    /// The plates' blur in px (0 to 48).
+    /// The plates' blur in px (0 to 48). Unset is flat (0 px by default).
     pub fn glass_blur(&self) -> f32 {
         self.blur
             .filter(|v| v.is_finite())
-            .map_or(horizon_theme::glass::BLUR, |v| v.clamp(0., 48.))
+            .map_or(0.0, |v| v.clamp(0., 48.))
     }
     /// Whether the cheaper scene is on ([`performance`](Self::performance)).
     pub fn performance(&self) -> bool {
@@ -5570,9 +5575,9 @@ pub fn {f}("
     }
 
     #[test]
-    fn glass_and_blur_default_to_the_mockups_and_stay_in_range() {
+    fn glass_and_blur_default_flat_and_stay_in_range() {
         let unset = Settings::parse("{}");
-        assert_eq!((unset.glass_tint(), unset.glass_blur()), (0.06, 24.));
+        assert_eq!((unset.glass_tint(), unset.glass_blur()), (0.0, 0.0));
         let set = Settings::parse(r#"{"glass": 12, "blur": 8.5}"#);
         assert_eq!((set.glass_tint(), set.glass_blur()), (0.12, 8.5));
         let wild = Settings::parse(r#"{"glass": 90, "blur": -3}"#);
@@ -5585,7 +5590,7 @@ pub fn {f}("
                 wrong.glass_blur(),
                 wrong.game_args.as_str()
             ),
-            (0.06, 24., "--x")
+            (0.0, 0.0, "--x")
         );
     }
 

@@ -46,6 +46,21 @@ fn card() -> Div {
         .p(px(8.))
 }
 
+/// A row opening one of Horizon's links (Discord, Sponsor, Website) in the browser.
+fn link_row(id: &'static str, label: impl IntoElement, url: String, t: &Theme) -> Div {
+    index_row(
+        0,
+        label,
+        None,
+        (!url.is_empty()).then(|| {
+            button(id, "Open", Kind::Secondary, t)
+                .on_click(move |_, _, cx| cx.open_url(&url))
+                .into_any_element()
+        }),
+        t,
+    )
+}
+
 /// A tile (the mockup's `AboutTile`, `rounded-[14px] bg-white/[0.045] p-5`): its lead, name, a
 /// line under it and what it does.
 fn tile(lead: AnyElement, title: String, note: String, action: AnyElement) -> Div {
@@ -141,7 +156,7 @@ impl Launcher {
                     &t,
                 )
                 .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
-                    this.settings_pane.scroll_to_top_of_item(i);
+                    this.settings_scroll.handle.scroll_to_top_of_item(i);
                     cx.notify();
                 }))
             })
@@ -172,12 +187,14 @@ impl Launcher {
             .min_w_0()
             .h_full()
             .overflow_y_scroll()
-            .track_scroll(&self.settings_pane)
-            // A scroll redraws the pane from its layer without rendering the page again, so the
-            // list follows it here: on the next frame, once the offset has moved, and only when
-            // the section changed.
             .on_scroll(cx.listener(|_, _: &gpui::ScrollEvent, window, cx| {
                 cx.on_next_frame(window, |this, _, cx| {
+                    let hidden = this.settings_scroll.handle.offset().y < px(-120.);
+                    if hidden != this.settings_head_hidden {
+                        this.settings_head_hidden = hidden;
+                        cx.notify();
+                        return;
+                    }
                     if this.settings_section(SECTIONS.len()) != this.settings_marked {
                         cx.notify();
                     }
@@ -189,6 +206,7 @@ impl Launcher {
             .gap(px(16.))
             .pb(px(8.))
             .children(sections);
+        let pane = self.settings_scroll.wrap_with(pane, &t, 22.).flex_1().min_w_0().h_full();
         let content = if wide {
             div()
                 .flex()
@@ -214,10 +232,12 @@ impl Launcher {
             .flex_col()
             .w_full()
             .h_full()
-            .child(ui::page_head(
-                tr("Settings"),
-                tr("Accounts, updates, and the launcher itself."),
-            ))
+            .when(!self.settings_head_hidden, |d| {
+                d.child(ui::page_head(
+                    tr("Settings"),
+                    tr("Accounts, updates, and the launcher itself."),
+                ))
+            })
             .child(content)
     }
 
@@ -226,17 +246,17 @@ impl Launcher {
     /// the scroll is taken off them here. Reading them as they were left the list on the first
     /// section until the pane hit its end.
     fn settings_section(&self, count: usize) -> usize {
-        let pane = self.settings_pane.bounds();
-        let scrolled = -self.settings_pane.offset().y;
+        let pane = self.settings_scroll.handle.bounds();
+        let scrolled = -self.settings_scroll.handle.offset().y;
         let tops: Vec<f32> = (0..count)
-            .map_while(|i| self.settings_pane.bounds_for_item(i))
+            .map_while(|i| self.settings_scroll.handle.bounds_for_item(i))
             .map(|b| f32::from(b.top() - pane.top() - scrolled))
             .collect();
         spy(
             &tops,
             f32::from(pane.size.height),
             f32::from(scrolled),
-            f32::from(self.settings_pane.max_offset().y),
+            f32::from(self.settings_scroll.handle.max_offset().y),
         )
     }
 
@@ -505,7 +525,25 @@ impl Launcher {
                     &t,
                 ))
             })
-            .children(self.dev_options_section(cx));
+            .children(self.dev_options_section(cx))
+            .child(link_row(
+                "about-discord",
+                tr("Join the Discord"),
+                self.links.discord.clone(),
+                &t,
+            ))
+            .child(link_row(
+                "about-sponsor",
+                tr("Sponsor"),
+                self.links.sponsor.clone(),
+                &t,
+            ))
+            .child(link_row(
+                "about-website",
+                tr("Website"),
+                self.links.website.clone(),
+                &t,
+            ));
         let data = card().child(self.collection_section(cx));
         vec![account, updates, launcher, network, game, ai, about, data]
     }

@@ -30,6 +30,8 @@ pub(super) struct ModRow {
     pub(super) name: String,
     pub(super) version: String,
     pub(super) on: bool,
+    /// File size on disk, for the Largest/Smallest sorts.
+    pub(super) size: u64,
     /// What the browser knows of it; None: a file put in by hand.
     pub(super) entry: Option<installed::Entry>,
     /// The icon its jar names, scaled to the row (`images::ROW`) and decoded once by the UI.
@@ -62,6 +64,8 @@ pub(super) struct InstanceMods {
     /// shown list changes (its length and the filter).
     pub(super) cull: cull::Cull,
     pub(super) shown: (usize, String),
+    /// The mod whose delete button is asking for a second click, by file name.
+    pub(super) confirm_remove: Option<String>,
     fingerprint: String,
 }
 
@@ -129,6 +133,7 @@ fn read(home: &Path, java_instance: bool) -> Vec<ModRow> {
                         name,
                         version,
                         on,
+                        size: f.metadata().map(|m| m.len()).unwrap_or(0),
                         entry,
                         icon,
                         native: None,
@@ -139,14 +144,22 @@ fn read(home: &Path, java_instance: bool) -> Vec<ModRow> {
     } else {
         entries
             .into_iter()
-            .map(|e| ModRow {
-                file: e.file.clone(),
-                name: e.title.clone(),
-                version: e.number.clone(),
-                on: horizon::mod_id(&e).is_some_and(|id| java::is_enabled(home, id)),
-                entry: Some(e),
-                icon: None,
-                native: None,
+            .map(|e| {
+                let size = home
+                    .join(&e.file)
+                    .metadata()
+                    .map(|m| m.len())
+                    .unwrap_or(0);
+                ModRow {
+                    file: e.file.clone(),
+                    name: e.title.clone(),
+                    version: e.number.clone(),
+                    on: horizon::mod_id(&e).is_some_and(|id| java::is_enabled(home, id)),
+                    size,
+                    entry: Some(e),
+                    icon: None,
+                    native: None,
+                }
             })
             .collect()
     };
@@ -154,14 +167,22 @@ fn read(home: &Path, java_instance: bool) -> Vec<ModRow> {
         rows.extend(
             native_status::untracked(home)
                 .into_iter()
-                .map(|native| ModRow {
-                    file: native.file.clone(),
-                    name: native.id.clone(),
-                    version: native.version.clone(),
-                    on: java::is_enabled(home, &native.id),
-                    entry: None,
-                    icon: None,
-                    native: Some(native),
+                .map(|native| {
+                    let size = home
+                        .join(&native.file)
+                        .metadata()
+                        .map(|m| m.len())
+                        .unwrap_or(0);
+                    ModRow {
+                        file: native.file.clone(),
+                        name: native.id.clone(),
+                        version: native.version.clone(),
+                        on: java::is_enabled(home, &native.id),
+                        size,
+                        entry: None,
+                        icon: None,
+                        native: Some(native),
+                    }
                 }),
         );
     }
@@ -328,6 +349,34 @@ impl Launcher {
                 self.mods.message = switch_jar(&home, &row.file, !row.on).err().map(Err);
             }
         }
+        self.instance_mods.invalidate();
+    }
+
+    /// Turns every mod of the instance on or off with one press.
+    pub(super) fn set_all_mods(&mut self, on: bool) {
+        let rows = self.instance_mods.list.clone();
+        for row in rows.iter().filter(|r| r.on != on) {
+            self.switch_mod(row);
+        }
+    }
+
+    /// Removes a mod of the instance: its registry entry and file, or a hand-dropped jar.
+    pub(super) fn remove_mod(&mut self, row: &ModRow) {
+        let home = self.instance_mods.home.clone().unwrap_or_default();
+        let java_instance = self.selected_instance().is_some_and(|i| i.java.is_some());
+        let result = match &row.entry {
+            Some(e) => horizon_launcher::browser::installed::remove(&home, &e.project).map(|_| ()),
+            None if java_instance => {
+                let jar = home.join(&row.file);
+                let off = home.join(format!("{}{OFF}", row.file));
+                let _ = std::fs::remove_file(&jar);
+                let _ = std::fs::remove_file(&off);
+                Ok(())
+            }
+            None => Err("Not removable here.".into()),
+        };
+        self.mods.message = result.err().map(Err);
+        self.instance_mods.confirm_remove = None;
         self.instance_mods.invalidate();
     }
 

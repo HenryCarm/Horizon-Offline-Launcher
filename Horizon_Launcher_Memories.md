@@ -198,6 +198,15 @@ if pins resolve but the stage matches, cargo relinks in seconds — the build *s
 - Release keys: our private release key lived in `/tmp/opencode/our-release-key.der` —
   **lost in a /tmp wipe**; public key remains in `crates/horizon-release-sign/release-keys.txt`
   (no private material in repo). Rotate if local signing is ever needed again.
+- **`RELEASE_SIGNING_KEY` self-destruct (Henny's wish, 2026-11-09):** background watcher v2
+  (`remove-key-after-build.sh`, same folder; log `remove-key.log`) — **Phase A** waits for the
+  `launcher@1.4.1` workflow (run 42568070189) to complete, and only on `conclusion=success` moves to
+  **Phase B**, which waits for the fork's `game.yml` (nightly republish) run to finish with success;
+  only then does it delete the `RELEASE_SIGNING_KEY` secret (API `DELETE /actions/secrets/RELEASE_SIGNING_KEY`,
+  token read from `~/.git-credentials` at runtime). Any failure or no dispatch → **key stays**.
+  After that: no signed releases EVER; the 1.4.1 release itself stays validly signed. To publish again
+  later: generate a NEW keypair, commit the new public key to `release-keys.txt`, set the secret —
+  that is "putting the key back", not a restore (the old one is unrecoverable).
 - **Fork tree rule (from its own AGENTS.md/CONTRIBUTING):** commits end with `Co-Authored-By:`
   for the agent; agent-opened PRs start with `> 🤖 Opened by <login>'s AI agent (<tool>)`.
 - The launcher binary on Henny's machine is **not** built from our tree; it came from the
@@ -321,3 +330,68 @@ Current playable: `imported-2026-11-08-603724d`, `settings.json.selected` = same
 - CI: `launcher.yml` — push to `main` / PR / tag `launcher@*` → `cargo test --release --locked` (no fmt/clippy gate) → Win/Linux/macOS matrix → tag ⇒ sign + publish GitHub release ("latest" of our repo).
 - Committing to our fork: shallow clone at `Horizon Launcher Henry/fork/`; `git config credential.helper 'store --file=.fork-credentials'` (600, in the permanent folder); LOCAL git identity `HenryCarm <HenryCarm@users.noreply.github.com>`; commit ends with `Co-Authored-By: OpenCode <noreply@opencode.ai>`.
 - Game CI (`game.yml`): rebuilds/republishes the rolling `nightly` release from our fork; triggers on workflow_dispatch / pushes (check its `on:` block before relying on auto-builds).
+
+## 14. Rebase in flight (2026-11-09, not yet landed)
+
+- Fork `nightly-2026-11-08` HEAD = `bb5acc8` (GUI redesign + date-under-hash + Memories + 5 icons).
+- Upstream `nightly-source/2026-11-08-fdc87ae` = Nov-8 nightly (51 commits incl. using-item refactor #11978
+  + big game.rs split). **It touches NONE of our files** — verified via compare API.
+- Git history is UNRELATED (our fork = overlay import), so `git merge` = 144 add/add conflicts → **aborted**.
+  Strategy changed: deterministic **hash-based union** (`union-build.py` in this folder):
+  base = `nightly-source/2026-11-07-2ebf00a` tarball, theirs = `fdc87ae` tarball, ours = fork working tree.
+  Upstream wins except where ours differs; both-changed gets hand review (expect: nothing —
+  `.github/workflows/game.yml` + `launcher.yml` stay **ours** (upstream deleted/rewrote them into
+  irrelevant release-train infra), `release-keys.txt` upstream == base so ours wins intact).
+- Tarballs downloading in background: `base-2ebf00a…tar.gz`, `base-fdc87ae…tar.gz`.
+- After union: `git add -A && git commit && git push` → then dispatch `game.yml` ("game" workflow, builds
+  our fork's client into upstream's current Nightly prepared assets, resigns with fork key, publishes
+  our `nightly` pre-release). Watcher v2 phase B deletes `RELEASE_SIGNING_KEY` only after THAT succeeds.
+- Game target: `nightly-source/2026-11-08-fdc87ae` client = latest Horizon **with our GL fixes**.
+  Native-mod `.hnmod` rebuild problem unchanged (still blocked on pin-revert; next pin = fdc87ae tree).
+
+### Build status (2026-11-09 ~07:10, update)
+- `launcher@1.4.1` (run 42568070189) FAILED — pre-existing fork issues, not the GUI work:
+  6 tests assumed upstream repo (`horizon-rust/horizon`) while fork REPO=HenryCarm (mirror/signed/platform-assets), Windows installer referenced missing `packaging/windows/setup.iss`.
+- Fixed in `aa7ad1e2b` ("Fork: unbreak our own launcher CI"): test expectations -> HenryCarm, windows-aarch64 launcher asset optional in test, installer step skips when script absent.
+- Tag `launcher@1.4.2` pushed; run 42571278771 in_progress at 2026-11-09 06:08 UTC.
+- Game run 42571036125 in_progress on branch nightly-2026-11-08 @ 3702eae73 (rebased fdc87ae tree) — this publishes our fork's rolling `nightly` release (= latest Horizon + GL fixes).
+- Watcher v4 (`remove-key-after-build.sh`): waits for BOTH game 42571036125 success AND newest launcher@1.4.2 run success, then deletes RELEASE_SIGNING_KEY. Log: remove-key.log.
+- GUI binary (linux job of 1.4.1) already built fine — only tests/installer blocked the release. Our GUI code compiled (635 tests passed before the 6 fork-mismatch failures).
+
+### Installed (2026-11-09 ~13:15)
+- Game: new version `imported-2026-11-09-f49b940` created from nightly release `horizon-linux-x86_64.tar.gz` (sha256 f49b940a...), selected in settings.json. Old `imported-2026-11-08-603724d` kept as rollback. Base files (ctl/prepare/server) inherited from old import.
+- Launcher: binary at ~/.local/share/horizon-offline-launcher/horizon-offline-launcher replaced with fork 1.4.2 (73M, from launcher@1.4.2 tarball). Official binary backed up to OpenCode/tmp/Trash/install-2026-11-09/. CLI symlink ~/.local/bin/horizon-offline-launcher follows it.
+- RELEASE_SIGNING_KEY deleted from cloud 2026-11-09 13:13 CET (watcher v5, HTTP 204). Next publish needs NEW keypair.
+- Disk 647M free (99%) after installs — empty Trash to reclaim.
+
+## 15. Henny's launcher layout canon (2026-11-09 — DO NOT LOSE THIS)
+
+Henny's taste is canonical for every launcher update from now on. Horizon 1.5+ (or any
+rebase) must NOT silently revert these. If upstream moves code, re-apply them by hand:
+
+1. **Sidebar (left rail):** page nav lives here as floating icon+label rows (Home/Mods/Servers/
+   Wardrobe[/Shop]/Versions, with icons home-01, package-01, server-01, hanger-01,
+   shopping-bag-01, archive-01). Rail collapses to 72px icon-only via the chevron at the
+   sidebar's foot (`sidebar_mini` setting). Instances + servers below the nav; update card stays.
+2. **NO Discord/Sponsor/Website in the sidebar.** Those three live ONLY at the bottom of
+   Settings (About card, "Open" rows). The Sculk partner card stays in the sidebar (already hideable).
+3. **Sidebar footer:** below the version line ("Launcher {version}") it must read:
+   "Modded by HenryJayz btw :3" — Henny's signature. Keep it.
+4. **Top bar:** NO "Sign in with Microsoft" button up there. It lives in
+   Settings → Account (Microsoft card), where it always was. Top bar keeps: Build log,
+   account chip (HenryJay Offline), settings icon.
+5. **Mods tab (Home → Mods):** sort menu (Name / On first / Off first / Largest / Smallest,
+   persisted as `settings.mods_sort`), "All on" / "All off" toggle-all buttons, hover trash
+   (`delete-02`) per row with click-again confirm. **Toggle scroll bug rule:** never swap the
+   list for a "Reading the mods…" placeholder while a cached list exists — it collapses scroll
+   geometry and dumps the user at the bottom. Render cached rows while reloading.
+6. **Settings page:** big right scrollbar (20px track, wide thumb), the big
+   "Settings / Accounts, updates, and the launcher itself" header **collapses away** as you
+   scroll down (returns at the top). Settings nav spy stays.
+7. **Glass/blur defaults for NEW users:** glass 0% and blur 0px (flat, no frost) unless they
+   change it in Settings (see `Settings::glass_tint/glass_blur` fallbacks).
+8. **Version picker:** date under every hash (`{tag} · {YYYY-MM-DD}` from the version folder's
+   creation day). Latest nightly = our fork's rolling `nightly`; never point at upstream's.
+9. **Henny's playground:** this fork is a games machine, not a trophy case. Keep the sidebar
+   nav + settings links + footer credit through every upstream pull. When in doubt about a
+   layout call: sidebar > topbar, settings > sidebar, icons > words, dates > hashes.

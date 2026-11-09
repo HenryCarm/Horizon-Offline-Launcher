@@ -224,7 +224,9 @@ struct Launcher {
     switches: usize,
     content_scroll: Scrollbar,
     /// The glass Settings page's own scroll: its sections beside their list.
-    settings_pane: gpui::ScrollHandle,
+    settings_scroll: Scrollbar,
+    /// Whether the Settings page head is on screen (it hides once scrolled down).
+    settings_head_hidden: bool,
     /// The section the glass Settings list marked when last drawn (`glass_settings`).
     settings_marked: usize,
     /// The Mods page's project card, kept in view beside its list.
@@ -583,7 +585,8 @@ impl Launcher {
             page: Page::from_env(),
             switches: 0,
             content_scroll: Scrollbar::default(),
-            settings_pane: gpui::ScrollHandle::new(),
+            settings_scroll: Scrollbar::default(),
+            settings_head_hidden: false,
             settings_marked: 0,
             mods_sticky: sticky::Sticky::default(),
             long_list: cull::Cull::default(),
