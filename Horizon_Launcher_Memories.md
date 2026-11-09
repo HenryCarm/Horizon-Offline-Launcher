@@ -373,8 +373,9 @@ rebase) must NOT silently revert these. If upstream moves code, re-apply them by
    Wardrobe[/Shop]/Versions, with icons home-01, package-01, server-01, hanger-01,
    shopping-bag-01, archive-01). Rail collapses to 72px icon-only via the chevron at the
    sidebar's foot (`sidebar_mini` setting). Instances + servers below the nav; update card stays.
-2. **NO Discord/Sponsor/Website in the sidebar.** Those three live ONLY at the bottom of
-   Settings (About card, "Open" rows). The Sculk partner card stays in the sidebar (already hideable).
+2. **NO Discord/Sponsor/Website in the sidebar.** Those four live ONLY at the bottom of
+   Settings (About card, "Open" rows): Join the Discord, Sponsor, Website, My Website
+   (https://github.com/HenryJayZ). The Sculk partner card stays in the sidebar (already hideable).
 3. **Sidebar footer:** below the version line ("Launcher {version}") it must read:
    "Modded by HenryJayz btw :3" — Henny's signature. Keep it.
 4. **Top bar:** NO "Sign in with Microsoft" button up there. It lives in
@@ -395,3 +396,29 @@ rebase) must NOT silently revert these. If upstream moves code, re-apply them by
 9. **Henny's playground:** this fork is a games machine, not a trophy case. Keep the sidebar
    nav + settings links + footer credit through every upstream pull. When in doubt about a
    layout call: sidebar > topbar, settings > sidebar, icons > words, dates > hashes.
+
+### Build status (2026-11-09 ~16:20, update)
+- **Default accent is now RED** (commit d1d322cd7, launcher@1.4.3): `Accent::default()` = RED (hue 356);
+  settings/theme-picker/reset follow the default. Glass/blur defaults remain 0% / 0px for new users.
+- **Signing key rotated again**: prior private key was unrecoverable (deleted from cloud + /tmp wipe).
+  New Ed25519 keypair generated 2026-11-09: public `WxbJVd1zrDUf6WaDwwLo8jiEIHTSZyOa9DqfkToR0VQ=`
+  committed to `crates/horizon-release-sign/release-keys.txt`; private DER kept locally at
+  `/home/henry/Documents/Projects/Horizon Launcher Henry/.signing/signing-key.der` (600).
+  `RELEASE_SIGNING_KEY` secret re-set via API (libsodium sealed box). Watcher v6 deletes it
+  after launcher@1.4.3 publishes. **Do NOT commit `.signing/`**; treat the private as gone again after deletion.
+- Tag `launcher@1.4.3` pushed; CI run 42642787295 queued 2026-11-09 15:15 UTC.
+
+### Build status (2026-11-09 ~17:40, update)
+- **GitHub username renamed HenryCarm → HenryJayZ** (same account!). All repo URLs redirect,
+  token identity verified HenryJayZ, tags/secrets/releases untouched. Local remote + `backend::REPO`
+  + tests now use `HenryJayZ/Horizon-Offline-Launcher` (no redirect reliance). No serious consequences.
+- Pending 1.4.6 bundle (not yet coded when this was written): native Build 404 fix (upstream commit
+  lookup + graceful fallback), Java button no-popup, multi-select mods/packs/shaders, custom SVG
+  titlebar + OS bar removal, slimmer Settings header. The Build 404 is the only one blocking mods.
+
+### Update (2026-11-09 ~17:50, user notes)
+- Settings links at bottom now: Join the Discord, Sponsor, Website, **My Website** (https://henryjayz.github.io/CelSuite/), **My Profile** (https://github.com/HenryJayZ).
+- User renamed GitHub username **HenryCarm -> HenryJayZ**; repo now at HenryJayZ/Horizon-Offline-Launcher (old URL redirects, token identity verified). Patched `backend::REPO` + tests to the new name.
+- User asked to DELETE the public releases (launcher@1.4.2, nightly rolling, nightly-2026-11-08) — deleted via API 2026-11-09 (~17:47). Tags also deleted. Watch for nightly game rebuild republishing a fresh `nightly` later.
+- The new PAT expires in ~24h (as of 2026-11-09 ~17:50); if actions 401 later, re-paste a fresh one.
+- Signing key: the rotated private stays BOTH in cloud secret and local `.signing/signing-key.der` (600) until user says otherwise — previous auto-delete watchers intentionally NOT relaunched for 1.4.6; the key is an asset again.

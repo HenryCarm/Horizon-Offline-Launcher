@@ -1075,9 +1075,15 @@ fn newest(
     pins.extend(also.filter(|a| !pins.contains(a)));
     let mut dated = Vec::new();
     for pin in pins {
-        let when = date(pin).map_err(|e| {
-            format!("Can't tell which of the mods' {which} revisions is newest: {e}")
-        })?;
+        // An undateable pin (offline, or a commit the repos don't list) can't block the build:
+        // it sorts oldest and the dated ones (or the fallback) still decides.
+        let when = match date(pin) {
+            Ok(when) => when,
+            Err(e) => {
+                log_warning(&format!("{} pin {pin} could not be dated: {e}", which));
+                String::new()
+            }
+        };
         dated.push((when, pin));
     }
     Ok(dated
@@ -1302,6 +1308,17 @@ fn profile_of(source: &Path, chosen: Profile) -> Profile {
     }
 }
 
+/// The upstream game repository: Horizon's own SHAs (mod pins, Nightly commits) live there,
+/// not in this fork's history, An unresolved one is not fatal: the oldest ordering just can't
+/// tell it apart, never a hard error (it used to brick the whole build).
+const UPSTREAM_GAME: &str = "horizon-rust/horizon";
+
+/// When `revision` was made, trying the game upstream first and this fork second.
+fn dated_game(revision: &str) -> Result<String, String> {
+    committed(UPSTREAM_GAME, revision)
+        .or_else(|_| committed(backend::REPO, revision))
+}
+
 /// The Horizon commit `version` (an installed release or Nightly) was built from, from GitHub.
 pub fn revision_of(version: &str) -> Result<String, String> {
     let reference = match version.strip_prefix("nightly-") {
@@ -1309,11 +1326,16 @@ pub fn revision_of(version: &str) -> Result<String, String> {
         Some(rest) => rest.rsplit('-').next().unwrap_or(rest),
         None => version,
     };
-    let url = format!(
-        "https://api.github.com/repos/{}/commits/{reference}",
-        backend::REPO
-    );
-    let commit = crate::github::json(&url)?;
+    // Same story as the pin dates above: the SHAs are upstream's, this fork's second.
+    let commit = crate::github::json(&format!(
+        "https://api.github.com/repos/{UPSTREAM_GAME}/commits/{reference}"
+    ))
+    .or_else(|_| {
+        crate::github::json(&format!(
+            "https://api.github.com/repos/{}/commits/{reference}",
+            backend::REPO
+        ))
+    })?;
     commit["sha"]
         .as_str()
         .filter(|s| is_revision(s))
@@ -2308,7 +2330,7 @@ fn pipeline(
         },
         None => revision_of(base),
     };
-    let date = |r: &str| committed(backend::REPO, r);
+    let date = |r: &str| dated_game(r);
     let (pinned, mut pinned_by) = pinned_revision(&pins, on_base, base_revision, date)?;
     // Known without asking GitHub again unless a pin chose the commit.
     let base_horizon = match pinned_by.is_empty() {
@@ -3719,8 +3741,9 @@ mod tests {
             A
         );
         let offline = |_: &str| -> Result<String, String> { Err("offline".into()) };
-        let err = newest(&split, "Horizon", horizon, never, None, offline).unwrap_err();
-        assert!(err.contains("offline"), "{err}");
+        // Undateable pins sort oldest instead of failing the build: with all unknown, the
+        // greatest pin string is the fallback pick.
+        assert_eq!(newest(&split, "Horizon", horizon, never, None, offline).unwrap(), B);
         // What the player is shown: each mod made for another revision, and the build's.
         assert_eq!(
             mismatch(&split, B).unwrap(),

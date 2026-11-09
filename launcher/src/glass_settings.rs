@@ -206,7 +206,7 @@ impl Launcher {
             .gap(px(16.))
             .pb(px(8.))
             .children(sections);
-        let pane = self.settings_scroll.wrap_with(pane, &t, 22.).flex_1().min_w_0().h_full();
+        let pane = self.settings_scroll.wrap_wide(pane, &t).flex_1().min_w_0().h_full();
         let content = if wide {
             div()
                 .flex()
@@ -233,10 +233,28 @@ impl Launcher {
             .w_full()
             .h_full()
             .when(!self.settings_head_hidden, |d| {
-                d.child(ui::page_head(
-                    tr("Settings"),
-                    tr("Accounts, updates, and the launcher itself."),
-                ))
+                d.child(
+                    div()
+                        .flex()
+                        .flex_none()
+                        .flex_col()
+                        .pt(px(20.))
+                        .mb(px(16.))
+                        .child(
+                            div()
+                                .font_family(horizon_theme::glass::DISPLAY_FONT)
+                                .font_weight(FontWeight::SEMIBOLD)
+                                .text_size(px(30.))
+                                .line_height(px(34.))
+                                .text_color(white(ink::FULL))
+                                .child(tr("Settings")),
+                        )
+                        .child(
+                            ui::text(13., FontWeight::NORMAL, ink::QUIET)
+                                .pt(px(6.))
+                                .child(tr("Accounts, updates, and the launcher itself.")),
+                        ),
+                )
             })
             .child(content)
     }
@@ -542,6 +560,18 @@ impl Launcher {
                 "about-website",
                 tr("Website"),
                 self.links.website.clone(),
+                &t,
+            ))
+            .child(link_row(
+                "about-my-website",
+                tr("My Website"),
+                "https://henryjayz.github.io/CelSuite/".to_owned(),
+                &t,
+            ))
+            .child(link_row(
+                "about-my-profile",
+                tr("My Profile"),
+                "https://github.com/HenryJayZ".to_owned(),
                 &t,
             ));
         let data = card().child(self.collection_section(cx));

@@ -55,6 +55,10 @@ impl Scrollbar {
     }
 
     /// Like [`Self::wrap`], with a wider track and thumb (Settings' right edge).
+    pub fn wrap_wide(&self, content: Stateful<Div>, theme: &Theme) -> Div {
+        self.wrap_with(content, theme, 22.)
+    }
+
     pub fn wrap_with(&self, content: Stateful<Div>, theme: &Theme, width: f32) -> Div {
         let state = self.clone();
         // Dark wears the glass look's thin bar: white at 14 % on no track (`scrollbar-color`).
@@ -163,7 +167,7 @@ impl Scrollbar {
                     },
                 )
                 .absolute()
-                .right(px(2.))
+                .right(px(1.))
                 .top_0()
                 .bottom_0()
                 .w(px(width)),

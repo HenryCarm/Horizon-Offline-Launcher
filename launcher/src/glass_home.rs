@@ -153,19 +153,19 @@ impl Launcher {
     }
 
     /// An edition tab's click: the instance of that edition (`java`) played last, or, with none,
-    /// the New instance dialog on Vanilla or Horizon.
+    /// a line in place of the New instance popup — Henny's fork doesn't ambush him with a modal
+    /// when he just wants to look around; instances are made from the sidebar.
     pub(super) fn switch_edition(&mut self, java: bool, cx: &mut Context<Self>) {
         let pick = edition_pick(&self.instances.list, java).cloned();
         match pick {
             Some(instance) => self.select_instance(&instance),
             None => {
-                self.open_instance_dialog(None);
-                let kind = if java {
-                    new_instance::NewKind::Vanilla
+                crate::glass_toast::say(if java {
+                    tr("No Java instance yet — add one with + beside Instances.")
                 } else {
-                    new_instance::NewKind::Horizon
-                };
-                self.pick_kind(kind, cx);
+                    tr("No Rust instance yet — add one with + beside Instances.")
+                });
+                cx.notify();
             }
         }
     }
