@@ -16,6 +16,8 @@ use std::rc::Rc;
 /// The sidebar's width and its distance from the window's edges (`w-[248px]`, `m-3.5`).
 pub const SIDEBAR: f32 = 248.;
 pub const MARGIN: f32 = 14.;
+/// The glass sidebar's collapsed width: an icon-only rail.
+const MINI: f32 = 72.;
 
 /// The ⋮ menu of a sidebar row while open: whose, and whether Delete… was pressed once.
 #[derive(Clone, Default)]
@@ -155,6 +157,7 @@ impl Launcher {
     /// The instances by group (`sections` in the mockup): those without a group first.
     fn glass_instances(&mut self, cx: &mut Context<Self>) -> Vec<AnyElement> {
         let t = self.theme;
+        let mini = self.settings.sidebar_mini;
         let selected = self.selected_instance().map(|i| i.id.clone());
         let on_packs = self.page == Page::Mods && self.mods.on_modpacks();
         let mut out = Vec::new();
@@ -165,6 +168,45 @@ impl Launcher {
             div().flex().flex_col().gap(px(4.))
         };
         for i in self.instances.list.clone() {
+            if mini {
+                let icon = self.glass_instance_icon(&i, 44.);
+                let clicked = i.clone();
+                let chosen = match i.kind {
+                    InstanceKind::Default | InstanceKind::Own => selected.as_ref() == Some(&i.id),
+                    InstanceKind::Port => {
+                        on_packs && self.pack_open.as_deref() == Some(&i.id["port:".len()..])
+                    }
+                    InstanceKind::Pack => false,
+                };
+                list = list.child(
+                    div()
+                        .id(format!("side-instance-{}", i.id))
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .h(px(52.))
+                        .w_full()
+                        .rounded(px(radius::CONTROL))
+                        .cursor_pointer()
+                        .when(chosen, |d| d.bg(white(fill::ACTIVE)))
+                        .when(!chosen, |d| d.hover(|s| s.bg(white(fill::HOVER))))
+                        .child(icon)
+                        .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
+                            match clicked.kind {
+                                InstanceKind::Default | InstanceKind::Own => {
+                                    this.select_instance(&clicked);
+                                    this.go(Page::Play);
+                                }
+                                InstanceKind::Port => {
+                                    this.show_modpack(Some(clicked.id["port:".len()..].into()))
+                                }
+                                InstanceKind::Pack => this.show_modpack(None),
+                            }
+                            cx.notify();
+                        })),
+                );
+                continue;
+            }
             if i.group != group {
                 list = flush(list, &mut out);
                 group = i.group.clone();
@@ -291,16 +333,102 @@ impl Launcher {
             this.open_instance_dialog(None);
             cx.notify();
         }));
-        let header = div()
+        let mini = self.settings.sidebar_mini;
+        let header = if mini {
+            div()
+                .flex()
+                .flex_none()
+                .items_center()
+                .justify_center()
+                .pt(px(12.))
+                .pb(px(4.))
+                .child(add)
+        } else {
+            div()
+                .flex()
+                .flex_none()
+                .items_center()
+                .justify_between()
+                .px(px(16.))
+                .pt(px(16.))
+                .pb(px(8.))
+                .child(ui::text(13., FontWeight::MEDIUM, ink::NOTE).child(tr("Instances")))
+                .child(add)
+        };
+        // The pages, floating above the instances: one row per page, the current page lit.
+        let nav_icon = |page: Page| match page {
+            Page::Play => "home-01",
+            Page::Mods => "package-01",
+            Page::Servers => "server-01",
+            Page::Wardrobe => "hanger-01",
+            Page::Shop => "shopping-bag-01",
+            Page::Versions => "archive-01",
+            Page::Settings => "sliders-horizontal",
+        };
+        let mut nav = div()
             .flex()
+            .flex_col()
             .flex_none()
-            .items_center()
-            .justify_between()
-            .px(px(16.))
-            .pt(px(16.))
-            .pb(px(8.))
-            .child(ui::text(13., FontWeight::MEDIUM, ink::NOTE).child(tr("Instances")))
-            .child(add);
+            .gap(px(4.))
+            .px(px(10.))
+            .pt(px(12.));
+        for (page, label, _) in Page::in_top_bar(self.wardrobe_shown()) {
+            let active = self.page == page;
+            let on_click = cx.listener(move |this, _: &ClickEvent, _, cx| {
+                this.go(page);
+                cx.notify();
+            });
+            if mini {
+                nav = nav.child(
+                    ui::icon_button(
+                        format!("side-nav-{label}"),
+                        nav_icon(page),
+                        44.,
+                        20.,
+                        radius::CONTROL,
+                        active,
+                        &t,
+                    )
+                    .on_click(on_click),
+                );
+            } else {
+                nav = nav.child(
+                    div()
+                        .id(format!("side-nav-{label}"))
+                        .relative()
+                        .flex()
+                        .items_center()
+                        .gap(px(12.))
+                        .h(px(40.))
+                        .px(px(12.))
+                        .rounded(px(radius::CONTROL))
+                        .cursor_pointer()
+                        .when(active, |d| d.bg(white(fill::ACTIVE)))
+                        .when(!active, |d| d.hover(|s| s.bg(white(fill::HOVER))))
+                        .child(
+                            ui::icon(
+                                nav_icon(page),
+                                18.,
+                                white(if active { ink::FULL } else { ink::SOFT }),
+                            )
+                            .relative(),
+                        )
+                        .child(
+                            ui::text(
+                                14.,
+                                if active {
+                                    FontWeight::SEMIBOLD
+                                } else {
+                                    FontWeight::MEDIUM
+                                },
+                                if active { ink::FULL } else { ink::SOFT },
+                            )
+                            .child(label),
+                        )
+                        .on_click(on_click),
+                );
+            }
+        }
         let mut list = div()
             .id("side-list")
             .flex()
@@ -318,7 +446,7 @@ impl Launcher {
             .sidebar_list()
             .map(<[_]>::to_vec)
             .unwrap_or_else(|| self.side_servers.clone());
-        if !servers.is_empty() {
+        if !servers.is_empty() && !mini {
             list = list.child(
                 ui::text(12., FontWeight::MEDIUM, ink::DIM)
                     .px(px(8.))
@@ -332,19 +460,41 @@ impl Launcher {
             let up = self.servers.is_up(&e.dir);
             let open = self.page == Page::Servers && self.servers.open.as_ref() == Some(&e.dir);
             let dir = e.dir.clone();
+            let server_body = div()
+                .relative()
+                .flex()
+                .flex_none()
+                .items_center()
+                .justify_center()
+                .size(px(38.))
+                .rounded(px(radius::CONTROL))
+                .bg(white(fill::BUTTON))
+                .child(ui::icon("computer-terminal-01", 18., white(ink::STRONG)));
+            if mini {
+                server_rows = server_rows.child(
+                    div()
+                        .id(format!("side-server-{}", e.dir.display()))
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .h(px(48.))
+                        .w_full()
+                        .rounded(px(radius::CONTROL))
+                        .cursor_pointer()
+                        .when(open, |d| d.bg(white(fill::ACTIVE)))
+                        .hover(|s| s.bg(white(fill::HOVER)))
+                        .child(server_body)
+                        .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
+                            this.open_server(dir.clone());
+                            this.go(Page::Servers);
+                            cx.notify();
+                        })),
+                );
+            } else {
             server_rows = server_rows.child(
                 ui::row(format!("side-server-{}", e.dir.display()), open, 8., &t)
                     .child(
-                        div()
-                            .relative()
-                            .flex()
-                            .flex_none()
-                            .items_center()
-                            .justify_center()
-                            .size(px(38.))
-                            .rounded(px(radius::CONTROL))
-                            .bg(white(fill::BUTTON))
-                            .child(ui::icon("computer-terminal-01", 18., white(ink::STRONG))),
+                        server_body,
                     )
                     .child(ui::row_text(
                         e.name.clone(),
@@ -360,6 +510,7 @@ impl Launcher {
                         cx.notify();
                     })),
             );
+            }
         }
         let list = list.child(server_rows);
 
@@ -389,6 +540,7 @@ impl Launcher {
                         ),
                 )
         };
+        if !mini {
         match &self.self_update {
             SelfUpdate::Downloading(version, f) => {
                 foot = foot.child(
@@ -469,11 +621,12 @@ impl Launcher {
             }
             _ => {}
         }
+        }
 
         // Sculk's card (not in the mockup, kept: a sponsor), where the old sidebar had it: at
         // the sidebar's foot above the links, on every page (Servers shows the wide banner too).
         // Tall where the sidebar has the height for it besides its rows, compact otherwise.
-        if !self.settings.partner_hidden {
+        if !self.settings.partner_hidden && !mini {
             let rows = self.instances.list.len() + servers.len();
             let free = f32::from(window.viewport_size().height)
                 - 2. * MARGIN
@@ -502,7 +655,25 @@ impl Launcher {
 
         if !self.links.discord.is_empty() {
             let url = self.links.discord.clone();
-            foot = foot.child(keyboard(
+            foot = if mini {
+                foot.child(keyboard(
+                    div()
+                        .id("discord")
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .h(px(44.))
+                        .w_full()
+                        .rounded(px(radius::CONTROL))
+                        .bg(ui::color(horizon_theme::glass::DISCORD))
+                        .hover(|s| s.bg(ui::color(horizon_theme::glass::DISCORD_HOVER)))
+                        .cursor_pointer()
+                        .child(ui::icon("discord", 18., gpui::white()))
+                        .on_click(move |_, _, cx| cx.open_url(&url)),
+                    &t,
+                ))
+            } else {
+                foot.child(keyboard(
                 div()
                     .id("discord")
                     .flex()
@@ -522,7 +693,8 @@ impl Launcher {
                     )
                     .on_click(move |_, _, cx| cx.open_url(&url)),
                 &t,
-            ));
+            ))
+            };
         }
         let link = |id: &'static str, label: &'static str, icon: &'static str, url: String| {
             let id = SharedString::from(id);
@@ -555,6 +727,45 @@ impl Launcher {
                 &t,
             )
         };
+        let mut mini_links = div().flex().flex_col().gap(px(4.)).mt(px(8.));
+        if mini {
+            if !self.links.sponsor.is_empty() {
+                let url = self.links.sponsor.clone();
+                mini_links = mini_links.child(keyboard(
+                    div()
+                        .id("sponsor")
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .h(px(40.))
+                        .w_full()
+                        .rounded(px(radius::CONTROL))
+                        .cursor_pointer()
+                        .hover(|s| s.bg(white(fill::HOVER)))
+                        .child(ui::icon("favourite", 18., white(ink::SOFT)))
+                        .on_click(move |_, _, cx| cx.open_url(&url)),
+                    &t,
+                ));
+            }
+            if !self.links.website.is_empty() {
+                let url = self.links.website.clone();
+                mini_links = mini_links.child(keyboard(
+                    div()
+                        .id("website")
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .h(px(40.))
+                        .w_full()
+                        .rounded(px(radius::CONTROL))
+                        .cursor_pointer()
+                        .hover(|s| s.bg(white(fill::HOVER)))
+                        .child(ui::icon("globe-02", 18., white(ink::SOFT)))
+                        .on_click(move |_, _, cx| cx.open_url(&url)),
+                    &t,
+                ));
+            }
+        }
         let mut links = div().flex().flex_col().mt(px(8.));
         if !self.links.sponsor.is_empty() {
             links = links.child(link(
@@ -572,63 +783,63 @@ impl Launcher {
                 self.links.website.clone(),
             ));
         }
-        foot = foot.child(links).child(
-            ui::text(12., FontWeight::NORMAL, ink::DIM)
-                .id("launcher-version")
-                .px(px(8.))
-                .pt(px(8.))
-                .child(trf("Launcher {version}", &[("version", backend::VERSION)]))
-                .on_click(cx.listener(|this, _: &ClickEvent, _, cx| {
-                    this.version_clicked();
-                    cx.notify();
-                })),
-        );
+        if !mini {
+            foot = foot.child(links).child(
+                ui::text(12., FontWeight::NORMAL, ink::DIM)
+                    .id("launcher-version")
+                    .px(px(8.))
+                    .pt(px(8.))
+                    .child(trf("Launcher {version}", &[("version", backend::VERSION)]))
+                    .on_click(cx.listener(|this, _: &ClickEvent, _, cx| {
+                        this.version_clicked();
+                        cx.notify();
+                    })),
+            );
+        } else {
+            foot = foot.child(mini_links);
+        }
 
+        let collapse = div()
+            .id("sidebar-collapse")
+            .flex()
+            .flex_none()
+            .items_center()
+            .justify_center()
+            .h(px(40.))
+            .cursor_pointer()
+            .hover(|s| s.bg(white(fill::HOVER)))
+            .child(
+                ui::icon("arrow-right-01", 18., white(ink::SOFT)).when(!mini, |s| {
+                    s.with_transformation(gpui::Transformation::rotate(gpui::radians(
+                        std::f32::consts::PI,
+                    )))
+                }),
+            )
+            .on_click(cx.listener(|this, _: &ClickEvent, _, cx| {
+                this.settings.sidebar_mini = !this.settings.sidebar_mini;
+                this.save_settings();
+                cx.notify();
+            }));
         crate::glass::plate(radius::PANEL)
             .flex()
             .flex_col()
             .flex_none()
-            .w(px(SIDEBAR))
+            .w(px(if mini { MINI } else { SIDEBAR }))
             .my(px(MARGIN))
             .ml(px(MARGIN))
             .overflow_hidden()
+            .child(nav.relative())
             .child(header.relative())
             .child(list.relative())
             .child(foot.relative())
+            .child(collapse.relative())
     }
 
     /// The glass top bar: the pages in a glass strip, then the player, Microsoft sign-in and
     /// Settings (`px-8 pt-3.5`).
     pub(super) fn glass_topbar(&mut self, cx: &mut Context<Self>) -> Div {
         let t = self.theme;
-        let wide = self.window_width >= crate::glass_home::TOP_BAR_WIDE;
         let compact = self.window_width < crate::glass_home::COMPACT;
-        let mut tabs = div()
-            .flex()
-            .items_center()
-            .gap(px(if compact { 2. } else { 4. }))
-            .min_w_0();
-        for (page, label, _) in Page::in_top_bar(self.wardrobe_shown()) {
-            let mut item = ui::tab(format!("nav-{label}"), tr(label), self.page == page, &t);
-            if compact {
-                item = item.px(px(8.));
-            }
-            tabs = tabs.child(
-                item.on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
-                    this.go(page);
-                    cx.notify();
-                })),
-            );
-        }
-        let strip = crate::glass::plate(radius::LARGE)
-            .p(px(4.))
-            .min_w_0()
-            .when(wide, |d| d.flex_none())
-            .when(!wide, |d| d.flex_shrink(1.).overflow_hidden())
-            .child(tabs.id("nav-pages").relative().when(!wide, |d| {
-                d.overflow_x_scroll()
-                    .on_scroll(|_, _, cx| cx.stop_propagation())
-            }));
 
         let (name, how) = self.who_plays();
         let face = match self.accounts.player() {
@@ -768,7 +979,6 @@ impl Launcher {
             .gap(px(12.))
             .px(px(32.))
             .pt(px(14.))
-            .child(strip)
             .children(self.toast_in_topbar())
             .child(
                 div()

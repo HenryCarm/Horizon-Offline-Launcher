@@ -13,8 +13,6 @@ const TALL: f32 = 56.;
 /// Play and the version are narrower and the invite code takes what is left of their row. The
 /// account page and the theme editor also put their two columns side by side from it.
 pub(super) const WIDE: f32 = 1280.;
-/// The window width from which the top bar's pages show at full size.
-pub(super) const TOP_BAR_WIDE: f32 = 1380.;
 /// The window width from which pages put their head and cards side by side (Overview, Mods,
 /// Versions, Settings' About); under it they stack, and Home's tabs drop their icons.
 pub(super) const SIDE_BY_SIDE: f32 = 1200.;
@@ -637,7 +635,10 @@ impl Launcher {
                 let note = if latest {
                     tr("Newest · follows updates").to_string()
                 } else {
-                    tag.clone()
+                    // Tag and install day are both machine data (no words to translate): show the
+                    // day the folder appeared, so a raw hash reads as a date.
+                    version_installed_day(tag)
+                        .map_or_else(|| tag.clone(), |day| format!("{tag} · {day}"))
                 };
                 let pick = tag.clone();
                 menu = menu.child(
@@ -971,6 +972,16 @@ enum PlayItem {
 /// The command that plays instance `id` without the window, as its desktop shortcut runs it.
 fn launch_command(id: &str) -> String {
     format!("horizon-launcher play --instance {id}")
+}
+
+/// The day `tag` was installed (`YYYY-MM-DD`), from its version folder's creation time, falling
+/// back to the modified time where the filesystem does not track one. Both the tag and the day are
+/// machine data, not a sentence, so no translation key is needed.
+fn version_installed_day(tag: &str) -> Option<String> {
+    let meta = std::fs::metadata(crate::backend::version_dir(tag)).ok()?;
+    let time = meta.created().or_else(|_| meta.modified()).ok()?;
+    let local: chrono::DateTime<chrono::Local> = time.into();
+    Some(local.format("%Y-%m-%d").to_string())
 }
 
 #[cfg(test)]

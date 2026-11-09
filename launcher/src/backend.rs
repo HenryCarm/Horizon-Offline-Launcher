@@ -4384,6 +4384,10 @@ pub struct Settings {
     /// Off by default, so the opening animation shows unless the player turns it off.
     #[serde(default)]
     pub skip_opening: bool,
+    /// The glass sidebar is shrunk to an icon-only rail (Home/Mods/Servers/… as glyphs, instance
+    /// pictures only), leaving the right-hand side of the window the room. Unset means false.
+    #[serde(default)]
+    pub sidebar_mini: bool,
     /// Linux: whether the launcher keeps its entry in the applications menu (`desktop`). Unset
     /// means yes; removing the entry stores `false`, so it doesn't come back on the next start.
     #[serde(default, skip_serializing_if = "Option::is_none")]

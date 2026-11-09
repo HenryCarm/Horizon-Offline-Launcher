@@ -58,6 +58,7 @@ pub mod glass_icons {
     }
     icons!(
         "ai-chat-02",
+        "archive-01",
         "arrow-down-01",
         "arrow-right-01",
         "cancel-01",
@@ -73,8 +74,10 @@ pub mod glass_icons {
         "favourite",
         "folder-01",
         "game-controller-01",
+        "hanger-01",
         "github",
         "globe-02",
+        "home-01",
         "image-01",
         "information-circle",
         "link-01",
@@ -88,6 +91,8 @@ pub mod glass_icons {
         "puzzle",
         "refresh",
         "search-01",
+        "server-01",
+        "shopping-bag-01",
         "sliders-horizontal",
         "stop",
         "tick-02",
