@@ -111,6 +111,13 @@ enum Page {
     /// Mods, resource packs and modpacks (imported ones and the browser's).
     Mods,
     Servers,
+    /// The Mods page, opened with the resource packs tab (`mods_page.rs`); beside it sit the
+    /// shader packs and data packs shortcuts, in the old cosmetics slots.
+    ResourcePacks,
+    /// The Mods page, opened with the shader packs tab.
+    ShaderPacks,
+    /// The Mods page, opened with the data packs tab.
+    DataPacks,
     /// What the player wears (`wardrobe_page.rs`), with the cosmetics flag on.
     Wardrobe,
     /// Cosmetics to try on and buy (`wardrobe_page/shop.rs`), beside the Wardrobe and under the
@@ -120,14 +127,17 @@ enum Page {
 }
 
 impl Page {
-    /// `HORIZON_LAUNCHER_PAGE=mods` (or `modpacks`, `resourcepacks`, `shaders`, `servers`, `versions`,
-    /// `settings`) opens on that page, for screenshots; Home otherwise (`getting-ready`: Home
+    /// `HORIZON_LAUNCHER_PAGE=mods` (or `modpacks`, `resourcepacks`, `shaders`, `shaderpacks`,
+    /// `datapacks`) opens on that page, for screenshots; Home otherwise (`getting-ready`: Home
     /// preparing, `home::getting_ready_preview`; `sign-in`: the owner gate's sheet with a
     /// made-up code, `owner_page::sign_in_preview`; `new-instance`: Home with the New instance
     /// dialog open on Modded; `edit-instance`: the selected one's Edit dialog; `worlds`, `packs`...: Home on that tab, `HomeTab::from_env`).
     fn from_env() -> Page {
         let page = match std::env::var("HORIZON_LAUNCHER_PAGE").as_deref() {
-            Ok("mods" | "modpacks" | "resourcepacks" | "shaders" | "datapacks") => Page::Mods,
+            Ok("mods" | "modpacks") => Page::Mods,
+            Ok("resourcepacks" | "resourcepack") => Page::ResourcePacks,
+            Ok("shaders" | "shaderpacks" | "shaderpack") => Page::ShaderPacks,
+            Ok("datapacks" | "datapack") => Page::DataPacks,
             Ok("servers") => Page::Servers,
             Ok("wardrobe") if horizon_cosmetics::forced() => Page::Wardrobe,
             Ok("shop") if horizon_cosmetics::forced() => Page::Shop,
@@ -145,24 +155,22 @@ impl Page {
 
     /// Every page, with its name and icon: the top bar shows all but Settings, which has its
     /// own button.
-    const ALL: [(Page, &'static str, &'static str); 7] = [
+    const ALL: [(Page, &'static str, &'static str); 8] = [
         (Page::Play, "Home", "home"),
         (Page::Mods, "Mods", "package"),
         (Page::Servers, "Servers", "server"),
-        (Page::Wardrobe, "Wardrobe", "user"),
-        (Page::Shop, "Shop", "bag"),
+        (Page::ResourcePacks, "Resource packs", "image"),
+        (Page::ShaderPacks, "Shader packs", "zap"),
+        (Page::DataPacks, "Data packs", "notes"),
         (Page::Versions, "Versions", "archive"),
         (Page::Settings, "Settings", "sliders"),
     ];
 
-    /// The pages the top bar shows: all but Settings, and the Wardrobe and the Shop only when
-    /// `wardrobe` (`Launcher::wardrobe_shown`).
-    fn in_top_bar(wardrobe: bool) -> impl Iterator<Item = (Page, &'static str, &'static str)> {
-        Self::ALL.into_iter().filter(move |(page, ..)| match page {
-            Page::Settings => false,
-            Page::Wardrobe | Page::Shop => wardrobe,
-            _ => true,
-        })
+    /// The pages the top bar shows: all but Settings. The cosmetics pages are in [`Self::ALL`]
+    /// no longer; they stay reachable with `HORIZON_LAUNCHER_PAGE=wardrobe` (or `shop`) in a
+    /// development build.
+    fn in_top_bar() -> impl Iterator<Item = (Page, &'static str, &'static str)> {
+        Self::ALL.into_iter().filter(|(page, ..)| !matches!(page, Page::Settings))
     }
 }
 
@@ -2819,7 +2827,7 @@ impl Launcher {
             .flex_wrap()
             .items_center()
             .gap(px(4.));
-        for (page, label, _) in Page::in_top_bar(self.wardrobe_shown()) {
+        for (page, label, _) in Page::in_top_bar() {
             nav = nav.child(
                 shell::tab(format!("nav-{label}"), tr(label), self.page == page, &t).on_click(
                     cx.listener(move |this, _: &ClickEvent, _, cx| {
@@ -5293,6 +5301,18 @@ impl Render for Launcher {
             Page::Play => self.play_page(cx),
             Page::Versions => self.versions_page(cx),
             Page::Mods => self.mods_page(cx),
+            Page::ResourcePacks => {
+                self.mods_set_kind(horizon_launcher::browser::Kind::ResourcePack);
+                self.mods_page(cx)
+            }
+            Page::ShaderPacks => {
+                self.mods_set_kind(horizon_launcher::browser::Kind::Shader);
+                self.mods_page(cx)
+            }
+            Page::DataPacks => {
+                self.mods_set_kind(horizon_launcher::browser::Kind::DataPack);
+                self.mods_page(cx)
+            }
             Page::Servers => self.servers_page(cx),
             Page::Wardrobe => self.wardrobe_page(cx),
             Page::Shop => self.shop_page(cx),

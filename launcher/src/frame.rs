@@ -360,6 +360,9 @@ impl Launcher {
             Page::Play => "home-01",
             Page::Mods => "package-01",
             Page::Servers => "server-01",
+            Page::ResourcePacks => "image-01",
+            Page::ShaderPacks => "color-picker",
+            Page::DataPacks => "puzzle",
             Page::Wardrobe => "hanger-01",
             Page::Shop => "shopping-bag-01",
             Page::Versions => "archive-01",
@@ -372,7 +375,7 @@ impl Launcher {
             .gap(px(4.))
             .px(px(10.))
             .pt(px(12.));
-        for (page, label, _) in Page::in_top_bar(self.wardrobe_shown()) {
+        for (page, label, _) in Page::in_top_bar() {
             let active = self.page == page;
             let on_click = cx.listener(move |this, _: &ClickEvent, _, cx| {
                 this.go(page);
