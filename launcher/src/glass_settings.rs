@@ -596,6 +596,24 @@ impl Launcher {
                     ),
                     &t,
                 ))
+            })
+            // Sculk's sponsor card, moved out of the sidebar to the bottom of the About card.
+            // Same rules as the sidebar had: gone once Hidden, and the Hide button shows only
+            // after the card has been on screen `SEEN_BEFORE_HIDE` seconds.
+            .when(!self.settings.partner_hidden, |d| {
+                let mut card = div().relative().mt(px(4.));
+                if self.settings.partner_seen_secs >= partner::SEEN_BEFORE_HIDE {
+                    card = card.child(
+                        partner::hide_button("partner-hide", &t).on_click(cx.listener(
+                            |this, _: &ClickEvent, _, cx| {
+                                this.settings.partner_hidden = true;
+                                this.save_settings();
+                                cx.notify();
+                            },
+                        )),
+                    );
+                }
+                d.child(card.child(partner::card("partner-settings", 320., false, &t)))
             });
         let data = card().child(self.collection_section(cx));
         vec![account, updates, launcher, network, game, ai, about, data]
