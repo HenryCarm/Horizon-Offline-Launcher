@@ -563,7 +563,40 @@ impl Launcher {
                 tr("My Profile"),
                 "https://github.com/HenryJayZ".to_owned(),
                 &t,
-            ));
+            ))
+            // The cosmetics pages, at the bottom, instead of the top bar's rail: the code is
+            // kept and reachable, just not a sidebar shortcut any more. Same rule as the rail
+            // had — Horizon's cosmetics service up, or `HORIZON_COSMETICS=1` asked for it.
+            .when(self.wardrobe_shown(), |d| {
+                d.child(index_row(
+                    0,
+                    tr("Wardrobe"),
+                    note("What the player wears."),
+                    Some(
+                        button("settings-wardrobe", "Open", Kind::Secondary, &t)
+                            .on_click(cx.listener(|this, _: &ClickEvent, _, cx| {
+                                this.go(Page::Wardrobe);
+                                cx.notify();
+                            }))
+                            .into_any_element(),
+                    ),
+                    &t,
+                ))
+                .child(index_row(
+                    0,
+                    tr("Shop"),
+                    note("Cosmetics to try on and buy."),
+                    Some(
+                        button("settings-shop", "Open", Kind::Secondary, &t)
+                            .on_click(cx.listener(|this, _: &ClickEvent, _, cx| {
+                                this.go(Page::Shop);
+                                cx.notify();
+                            }))
+                            .into_any_element(),
+                    ),
+                    &t,
+                ))
+            });
         let data = card().child(self.collection_section(cx));
         vec![account, updates, launcher, network, game, ai, about, data]
     }
